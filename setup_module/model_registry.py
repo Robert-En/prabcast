@@ -31,6 +31,8 @@ Usage:
 
 from typing import Dict, List, Type, Optional
 import streamlit as st
+import inspect
+import importlib
 from setup_module.model_base import BaseForecastModel, ModelCategory, ModelMetadata
 
 
@@ -253,33 +255,31 @@ def get_model_registry() -> ModelRegistry:
 
 def _register_all_models(registry: ModelRegistry) -> None:
     """
-    Registriert alle verfügbaren Modelle.
-    
-    Diese Funktion wird automatisch beim ersten Aufruf von get_model_registry() aufgerufen.
-    
-    Args:
-        registry: ModelRegistry instance
+    Registriert automatisch alle Modelle, die von BaseForecastModel erben
+    und im Modul 'app.models' definiert sind.
     """
     try:
-        # Import alle Modelle
-        from app.models import (
-            ARIMAModel, ProphetModel, LSTMModel, GRUModel, SESModel,
-            SARIMAModel, HoltWintersModel, XGBoostModel, RandomForestModel,
-            SeasonalNaiveModel, MovingAverageModel
-        )
-        
-        # Registriere alle Modelle
-        for model_class in [
-            ARIMAModel, ProphetModel, LSTMModel, GRUModel, SESModel,
-            SARIMAModel, HoltWintersModel, XGBoostModel, RandomForestModel,
-            SeasonalNaiveModel, MovingAverageModel
-        ]:
-            try:
-                registry.register(model_class)
-            except Exception as e:
-                # Log aber continue (damit andere Modelle trotzdem registriert werden)
-                import warnings
-                warnings.warn(f"Fehler beim Registrieren von {model_class.__name__}: {e}")
+        # 1. Das Modul dynamisch laden
+        module = importlib.import_module("app.models")
+
+        # 2. Alle Klassen im Modul durchlaufen
+        for name, obj in inspect.getmembers(module):
+            # Prüfen: Ist es eine Klasse? Erbt sie von BaseForecastModel?
+            # Und: Ist es nicht die Basisklasse selbst?
+            if (
+                    inspect.isclass(obj) and
+                    issubclass(obj, BaseForecastModel) and
+                    obj is not BaseForecastModel
+            ):
+                try:
+                    registry.register(obj)
+                except Exception as e:
+                    import warnings
+                    warnings.warn(f"Fehler beim Registrieren von {name}: {e}")
+
+    except ImportError as e:
+        import warnings
+        warnings.warn(f"Konnte app.models nicht dynamisch laden: {e}")
     
     except ImportError as e:
         # Wenn models.py nicht importiert werden kann, erstelle leere Registry

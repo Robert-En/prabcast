@@ -13,6 +13,7 @@ blinker==1.9.0
 cachetools==5.5.0
 certifi==2024.8.30
 charset-normalizer==3.4.0
+chronos-forecasting==2.2.2
 click==8.1.7
 cmdstanpy==1.2.4
 colorama==0.4.6
@@ -108,7 +109,7 @@ soupsieve==2.6
 stanio==0.5.1
 statsmodels==0.14.1
 streamlit==1.40.1
-sympy==1.13.3
+sympy==1.13.1
 tbb==2021.13.1
 tenacity==8.2.3
 tensorboard==2.16.2

@@ -12,15 +12,19 @@ from xgboost import XGBRegressor
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import MinMaxScaler
 import warnings
+import torch
+from chronos import ChronosPipeline, ChronosBoltPipeline, Chronos2Pipeline
+from importlib.metadata import PackageNotFoundError, version
 
 # Model Management
 from setup_module.model_base import BaseForecastModel, ModelMetadata, ModelCategory
 
 warnings.filterwarnings("ignore")  # Suppress warnings for cleaner output
 
+
 class SeasonalNaiveModel(BaseForecastModel):
     """Seasonal Naive Forecast - wiederholt letzte Saison."""
-    
+
     def __init__(self, season_length=12):
         super().__init__(season_length=season_length)
         self.season_length = season_length
@@ -32,11 +36,16 @@ class SeasonalNaiveModel(BaseForecastModel):
     def predict(self, steps):
         if not self.is_fitted:
             raise RuntimeError("Modell muss erst mit fit() trainiert werden")
-        last_season = self.data.iloc[-self.season_length:].values
+        last_season = self.data.iloc[-self.season_length :].values
         repeats = steps // self.season_length + 1
         forecast = np.tile(last_season, repeats)[:steps]
-        return pd.Series(forecast.flatten(), index=pd.date_range(self.data.index[-1] + pd.DateOffset(months=1), periods=steps, freq='M'))
-    
+        return pd.Series(
+            forecast.flatten(),
+            index=pd.date_range(
+                self.data.index[-1] + pd.DateOffset(months=1), periods=steps, freq="M"
+            ),
+        )
+
     @classmethod
     def get_metadata(cls) -> ModelMetadata:
         return ModelMetadata(
@@ -45,12 +54,13 @@ class SeasonalNaiveModel(BaseForecastModel):
             category=ModelCategory.NAIVE,
             supports_seasonality=True,
             min_data_points=12,
-            default_params={"season_length": 12}
+            default_params={"season_length": 12},
         )
+
 
 class MovingAverageModel(BaseForecastModel):
     """Moving Average Forecast - nutzt Durchschnitt der letzten N Werte."""
-    
+
     def __init__(self, window=12):
         super().__init__(window=window)
         self.window = window
@@ -62,12 +72,15 @@ class MovingAverageModel(BaseForecastModel):
     def predict(self, steps):
         if not self.is_fitted:
             raise RuntimeError("Modell muss erst mit fit() trainiert werden")
-        mean_value = self.data.iloc[-self.window:].mean()
-        forecast = pd.Series([mean_value] * steps,
-                             index=pd.date_range(self.data.index[-1] + pd.DateOffset(months=1),
-                                                 periods=steps, freq='M'))
+        mean_value = self.data.iloc[-self.window :].mean()
+        forecast = pd.Series(
+            [mean_value] * steps,
+            index=pd.date_range(
+                self.data.index[-1] + pd.DateOffset(months=1), periods=steps, freq="M"
+            ),
+        )
         return forecast
-    
+
     @classmethod
     def get_metadata(cls) -> ModelMetadata:
         return ModelMetadata(
@@ -75,12 +88,13 @@ class MovingAverageModel(BaseForecastModel):
             description="Durchschnitt der letzten N Werte - einfache Baseline",
             category=ModelCategory.NAIVE,
             min_data_points=12,
-            default_params={"window": 12}
+            default_params={"window": 12},
         )
+
 
 class ARIMAModel(BaseForecastModel):
     """ARIMA - AutoRegressive Integrated Moving Average."""
-    
+
     def __init__(self, order=(1, 1, 1)):
         super().__init__(order=order)
         self.order = order
@@ -96,7 +110,7 @@ class ARIMAModel(BaseForecastModel):
             raise RuntimeError("Modell muss erst mit fit() trainiert werden")
         forecast = self.model.forecast(steps=steps)
         return forecast
-    
+
     @classmethod
     def get_metadata(cls) -> ModelMetadata:
         return ModelMetadata(
@@ -106,8 +120,9 @@ class ARIMAModel(BaseForecastModel):
             requires_stationarity=True,
             is_probabilistic=True,
             min_data_points=30,
-            default_params={"order": (1, 1, 1)}
+            default_params={"order": (1, 1, 1)},
         )
+
 
 def standardize_data(data):
     """
@@ -118,32 +133,30 @@ def standardize_data(data):
     std_data = data.copy()
     if not isinstance(std_data.index, pd.DatetimeIndex):
         std_data.index = pd.to_datetime(std_data.index)
-    
+
     # Prophet format - ds and y columns
-    prophet_data = pd.DataFrame({
-        'ds': std_data.index,
-        'y': std_data.values
-    })
-    
+    prophet_data = pd.DataFrame({"ds": std_data.index, "y": std_data.values})
+
     return std_data, prophet_data
+
 
 # Update ProphetModel class
 class ProphetModel(BaseForecastModel):
     """Prophet - Facebook's Zeitreihenmodell mit Trend und Saisonalität."""
-    
+
     def __init__(self):
         super().__init__()
         self.model = None
         self.data = None
         self.params = {}
 
-    def fit(self, data, yearly_seasonality='auto', weekly_seasonality='auto', **kwargs):
+    def fit(self, data, yearly_seasonality="auto", weekly_seasonality="auto", **kwargs):
         _, prophet_data = standardize_data(data)
         self.data = data
         self.params = {
-            'yearly_seasonality': yearly_seasonality,
-            'weekly_seasonality': weekly_seasonality,
-            **kwargs
+            "yearly_seasonality": yearly_seasonality,
+            "weekly_seasonality": weekly_seasonality,
+            **kwargs,
         }
         self.model = Prophet(**self.params)
         self.model.fit(prophet_data)
@@ -153,14 +166,12 @@ class ProphetModel(BaseForecastModel):
         if not self.is_fitted:
             raise RuntimeError("Modell muss erst mit fit() trainiert werden")
         future_dates = pd.date_range(
-            start=self.data.index[-1] + pd.DateOffset(months=1),
-            periods=steps,
-            freq='M'
+            start=self.data.index[-1] + pd.DateOffset(months=1), periods=steps, freq="M"
         )
-        future_df = pd.DataFrame({'ds': future_dates})
+        future_df = pd.DataFrame({"ds": future_dates})
         forecast = self.model.predict(future_df)
-        return pd.Series(forecast['yhat'].values, index=future_dates)
-    
+        return pd.Series(forecast["yhat"].values, index=future_dates)
+
     @classmethod
     def get_metadata(cls) -> ModelMetadata:
         return ModelMetadata(
@@ -170,12 +181,13 @@ class ProphetModel(BaseForecastModel):
             supports_seasonality=True,
             is_probabilistic=True,
             min_data_points=20,
-            default_params={}
+            default_params={},
         )
+
 
 class LSTMModel(BaseForecastModel):
     """LSTM - Long Short-Term Memory Neural Network."""
-    
+
     def __init__(self, epochs=50, batch_size=1):
         super().__init__(epochs=epochs, batch_size=batch_size)
         self.epochs = epochs
@@ -194,7 +206,7 @@ class LSTMModel(BaseForecastModel):
     def fit(self, data, **kwargs):
         # Clear any previous session
         K.clear_session()
-        
+
         self.data = data
         scaler = MinMaxScaler()
         scaled_data = scaler.fit_transform(data.values.reshape(-1, 1))
@@ -203,7 +215,7 @@ class LSTMModel(BaseForecastModel):
         X, y = [], []
         window_size = 12
         for i in range(window_size, len(scaled_data)):
-            X.append(scaled_data[i-window_size:i, 0])
+            X.append(scaled_data[i - window_size : i, 0])
             y.append(scaled_data[i, 0])
         X, y = np.array(X), np.array(y)
         X = np.reshape(X, (X.shape[0], X.shape[1], 1))
@@ -212,24 +224,34 @@ class LSTMModel(BaseForecastModel):
         self.model.add(LSTM(50, return_sequences=True, input_shape=(X.shape[1], 1)))
         self.model.add(LSTM(50))
         self.model.add(Dense(1))
-        self.model.compile(optimizer='adam', loss='mean_squared_error')
+        self.model.compile(optimizer="adam", loss="mean_squared_error")
         self.model.fit(X, y, epochs=self.epochs, batch_size=self.batch_size, verbose=0)
         self.is_fitted = True
 
     def predict(self, steps):
         if not self.is_fitted:
             raise RuntimeError("Modell muss erst mit fit() trainiert werden")
-        last_sequence = self.scaler.transform(self.data.values[-12:].reshape(-1, 1)).flatten().tolist()
+        last_sequence = (
+            self.scaler.transform(self.data.values[-12:].reshape(-1, 1))
+            .flatten()
+            .tolist()
+        )
         forecast = []
         for _ in range(steps):
             input_seq = np.array(last_sequence[-12:]).reshape((1, 12, 1))
             pred = self.model.predict(input_seq, verbose=0)
-            forecast.append(pred[0,0])
-            last_sequence.append(pred[0,0])
-        forecast = self.scaler.inverse_transform(np.array(forecast).reshape(-1, 1)).flatten()
-        return pd.Series(forecast, index=pd.date_range(self.data.index[-1] + pd.DateOffset(months=1), 
-                                                     periods=steps, freq='M'))
-    
+            forecast.append(pred[0, 0])
+            last_sequence.append(pred[0, 0])
+        forecast = self.scaler.inverse_transform(
+            np.array(forecast).reshape(-1, 1)
+        ).flatten()
+        return pd.Series(
+            forecast,
+            index=pd.date_range(
+                self.data.index[-1] + pd.DateOffset(months=1), periods=steps, freq="M"
+            ),
+        )
+
     @classmethod
     def get_metadata(cls) -> ModelMetadata:
         return ModelMetadata(
@@ -238,12 +260,13 @@ class LSTMModel(BaseForecastModel):
             category=ModelCategory.DEEP_LEARNING,
             requires_long_history=True,
             min_data_points=50,
-            default_params={"epochs": 50, "batch_size": 1}
+            default_params={"epochs": 50, "batch_size": 1},
         )
+
 
 class GRUModel(BaseForecastModel):
     """GRU - Gated Recurrent Unit Neural Network."""
-    
+
     def __init__(self, epochs=50, batch_size=1):
         super().__init__(epochs=epochs, batch_size=batch_size)
         self.epochs = epochs
@@ -262,7 +285,7 @@ class GRUModel(BaseForecastModel):
     def fit(self, data, **kwargs):
         # Clear any previous session
         K.clear_session()
-        
+
         # Same implementation as before, but using self.epochs and self.batch_size
         self.data = data
         scaler = MinMaxScaler()
@@ -272,7 +295,7 @@ class GRUModel(BaseForecastModel):
         X, y = [], []
         window_size = 12
         for i in range(window_size, len(scaled_data)):
-            X.append(scaled_data[i-window_size:i, 0])
+            X.append(scaled_data[i - window_size : i, 0])
             y.append(scaled_data[i, 0])
         X, y = np.array(X), np.array(y)
         X = np.reshape(X, (X.shape[0], X.shape[1], 1))
@@ -281,24 +304,34 @@ class GRUModel(BaseForecastModel):
         self.model.add(GRU(50, return_sequences=True, input_shape=(X.shape[1], 1)))
         self.model.add(GRU(50))
         self.model.add(Dense(1))
-        self.model.compile(optimizer='adam', loss='mean_squared_error')
+        self.model.compile(optimizer="adam", loss="mean_squared_error")
         self.model.fit(X, y, epochs=self.epochs, batch_size=self.batch_size, verbose=0)
         self.is_fitted = True
 
     def predict(self, steps):
         if not self.is_fitted:
             raise RuntimeError("Modell muss erst mit fit() trainiert werden")
-        last_sequence = self.scaler.transform(self.data.values[-12:].reshape(-1, 1)).flatten().tolist()
+        last_sequence = (
+            self.scaler.transform(self.data.values[-12:].reshape(-1, 1))
+            .flatten()
+            .tolist()
+        )
         forecast = []
         for _ in range(steps):
             input_seq = np.array(last_sequence[-12:]).reshape((1, 12, 1))
             pred = self.model.predict(input_seq, verbose=0)
-            forecast.append(pred[0,0])
-            last_sequence.append(pred[0,0])
-        forecast = self.scaler.inverse_transform(np.array(forecast).reshape(-1, 1)).flatten()
-        return pd.Series(forecast, index=pd.date_range(self.data.index[-1] + pd.DateOffset(months=1), 
-                                                     periods=steps, freq='M'))
-    
+            forecast.append(pred[0, 0])
+            last_sequence.append(pred[0, 0])
+        forecast = self.scaler.inverse_transform(
+            np.array(forecast).reshape(-1, 1)
+        ).flatten()
+        return pd.Series(
+            forecast,
+            index=pd.date_range(
+                self.data.index[-1] + pd.DateOffset(months=1), periods=steps, freq="M"
+            ),
+        )
+
     @classmethod
     def get_metadata(cls) -> ModelMetadata:
         return ModelMetadata(
@@ -307,12 +340,13 @@ class GRUModel(BaseForecastModel):
             category=ModelCategory.DEEP_LEARNING,
             requires_long_history=True,
             min_data_points=50,
-            default_params={"epochs": 50, "batch_size": 1}
+            default_params={"epochs": 50, "batch_size": 1},
         )
+
 
 class SESModel(BaseForecastModel):
     """SES - Simple Exponential Smoothing."""
-    
+
     def __init__(self):
         super().__init__()
         self.model = None
@@ -327,9 +361,13 @@ class SESModel(BaseForecastModel):
         if not self.is_fitted:
             raise RuntimeError("Modell muss erst mit fit() trainiert werden")
         forecast = self.model.forecast(steps)
-        return pd.Series(forecast, index=pd.date_range(self.data.index[-1] + pd.DateOffset(months=1), 
-                                                     periods=steps, freq='M'))
-    
+        return pd.Series(
+            forecast,
+            index=pd.date_range(
+                self.data.index[-1] + pd.DateOffset(months=1), periods=steps, freq="M"
+            ),
+        )
+
     @classmethod
     def get_metadata(cls) -> ModelMetadata:
         return ModelMetadata(
@@ -337,12 +375,13 @@ class SESModel(BaseForecastModel):
             description="Simple Exponential Smoothing - für Daten ohne Trend/Saisonalität",
             category=ModelCategory.STATISTICAL,
             min_data_points=15,
-            default_params={}
+            default_params={},
         )
+
 
 class SARIMAModel(BaseForecastModel):
     """SARIMA - Seasonal ARIMA mit Saisonalitäts-Unterstützung."""
-    
+
     def __init__(self, order=(1, 1, 1), seasonal_order=(1, 1, 1, 12)):
         super().__init__(order=order, seasonal_order=seasonal_order)
         self.order = order
@@ -351,7 +390,9 @@ class SARIMAModel(BaseForecastModel):
 
     def fit(self, data, **kwargs):
         self.data = data
-        self.model = SARIMAX(data, order=self.order, seasonal_order=self.seasonal_order).fit()
+        self.model = SARIMAX(
+            data, order=self.order, seasonal_order=self.seasonal_order
+        ).fit()
         self.is_fitted = True
 
     def predict(self, steps):
@@ -359,7 +400,7 @@ class SARIMAModel(BaseForecastModel):
             raise RuntimeError("Modell muss erst mit fit() trainiert werden")
         forecast = self.model.forecast(steps=steps)
         return forecast
-    
+
     @classmethod
     def get_metadata(cls) -> ModelMetadata:
         return ModelMetadata(
@@ -370,19 +411,22 @@ class SARIMAModel(BaseForecastModel):
             supports_seasonality=True,
             is_probabilistic=True,
             min_data_points=40,
-            default_params={"order": (1, 1, 1), "seasonal_order": (1, 1, 1, 12)}
+            default_params={"order": (1, 1, 1), "seasonal_order": (1, 1, 1, 12)},
         )
+
 
 class HoltWintersModel(BaseForecastModel):
     """Holt-Winters - Exponential Smoothing mit Trend und Saisonalität."""
-    
+
     def __init__(self, seasonal_periods=12):
         super().__init__(seasonal_periods=seasonal_periods)
         self.seasonal_periods = seasonal_periods
         self.model = None
 
     def fit(self, data, **kwargs):
-        self.model = ExponentialSmoothing(data, seasonal_periods=self.seasonal_periods, seasonal='add').fit()
+        self.model = ExponentialSmoothing(
+            data, seasonal_periods=self.seasonal_periods, seasonal="add"
+        ).fit()
         self.data = data
         self.is_fitted = True
 
@@ -391,7 +435,7 @@ class HoltWintersModel(BaseForecastModel):
             raise RuntimeError("Modell muss erst mit fit() trainiert werden")
         forecast = self.model.forecast(steps)
         return forecast
-    
+
     @classmethod
     def get_metadata(cls) -> ModelMetadata:
         return ModelMetadata(
@@ -400,12 +444,13 @@ class HoltWintersModel(BaseForecastModel):
             category=ModelCategory.STATISTICAL,
             supports_seasonality=True,
             min_data_points=24,
-            default_params={"seasonal_periods": 12}
+            default_params={"seasonal_periods": 12},
         )
+
 
 class XGBoostModel(BaseForecastModel):
     """XGBoost - Gradient Boosting für Zeitreihen."""
-    
+
     def __init__(self, n_estimators=200, window_size=12):
         super().__init__(n_estimators=n_estimators, window_size=window_size)
         self.n_estimators = n_estimators
@@ -415,7 +460,7 @@ class XGBoostModel(BaseForecastModel):
     def create_features(self, data):
         X, y = [], []
         for i in range(self.window_size, len(data)):
-            X.append(data[i-self.window_size:i])
+            X.append(data[i - self.window_size : i])
             y.append(data[i])
         return np.array(X), np.array(y)
 
@@ -428,16 +473,20 @@ class XGBoostModel(BaseForecastModel):
     def predict(self, steps):
         if not self.is_fitted:
             raise RuntimeError("Modell muss erst mit fit() trainiert werden")
-        last_sequence = self.data.values[-self.window_size:].tolist()
+        last_sequence = self.data.values[-self.window_size :].tolist()
         forecast = []
         for _ in range(steps):
-            X_input = np.array(last_sequence[-self.window_size:]).reshape(1, -1)
+            X_input = np.array(last_sequence[-self.window_size :]).reshape(1, -1)
             pred = self.model.predict(X_input)[0]
             forecast.append(pred)
             last_sequence.append(pred)
-        return pd.Series(forecast, index=pd.date_range(self.data.index[-1] + pd.DateOffset(months=1), 
-                                                     periods=steps, freq='M'))
-    
+        return pd.Series(
+            forecast,
+            index=pd.date_range(
+                self.data.index[-1] + pd.DateOffset(months=1), periods=steps, freq="M"
+            ),
+        )
+
     @classmethod
     def get_metadata(cls) -> ModelMetadata:
         return ModelMetadata(
@@ -446,12 +495,13 @@ class XGBoostModel(BaseForecastModel):
             category=ModelCategory.MACHINE_LEARNING,
             requires_long_history=True,
             min_data_points=50,
-            default_params={"n_estimators": 200, "window_size": 12}
+            default_params={"n_estimators": 200, "window_size": 12},
         )
+
 
 class RandomForestModel(BaseForecastModel):
     """Random Forest - Ensemble von Entscheidungsbäumen."""
-    
+
     def __init__(self, n_estimators=200, window_size=12):
         super().__init__(n_estimators=n_estimators, window_size=window_size)
         self.n_estimators = n_estimators
@@ -461,7 +511,7 @@ class RandomForestModel(BaseForecastModel):
     def create_features(self, data):
         X, y = [], []
         for i in range(self.window_size, len(data)):
-            X.append(data[i-self.window_size:i])
+            X.append(data[i - self.window_size : i])
             y.append(data[i])
         return np.array(X), np.array(y)
 
@@ -474,16 +524,20 @@ class RandomForestModel(BaseForecastModel):
     def predict(self, steps):
         if not self.is_fitted:
             raise RuntimeError("Modell muss erst mit fit() trainiert werden")
-        last_sequence = self.data.values[-self.window_size:].tolist()
+        last_sequence = self.data.values[-self.window_size :].tolist()
         forecast = []
         for _ in range(steps):
-            X_input = np.array(last_sequence[-self.window_size:]).reshape(1, -1)
+            X_input = np.array(last_sequence[-self.window_size :]).reshape(1, -1)
             pred = self.model.predict(X_input)[0]
             forecast.append(pred)
             last_sequence.append(pred)
-        return pd.Series(forecast, index=pd.date_range(self.data.index[-1] + pd.DateOffset(months=1), 
-                                                     periods=steps, freq='M'))
-    
+        return pd.Series(
+            forecast,
+            index=pd.date_range(
+                self.data.index[-1] + pd.DateOffset(months=1), periods=steps, freq="M"
+            ),
+        )
+
     @classmethod
     def get_metadata(cls) -> ModelMetadata:
         return ModelMetadata(
@@ -492,10 +546,205 @@ class RandomForestModel(BaseForecastModel):
             category=ModelCategory.MACHINE_LEARNING,
             requires_long_history=True,
             min_data_points=50,
-            default_params={"n_estimators": 200, "window_size": 12}
+            default_params={"n_estimators": 200, "window_size": 12},
         )
-    
+
+
+class ChronosModel(BaseForecastModel):
+    """Chronos - Amazons Zero-Shot Zeitreihenmodell (Pre-trained Transformer)."""
+
+    def __init__(self, model_size="base", device=None):
+        super().__init__(model_size=model_size)
+        self.model_size = model_size
+        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu") # Automatische Geräteerkennung (GPU falls vorhanden)
+        self.pipeline = None
+        self.data = None
+
+    def fit(self, data, **kwargs):
+        """Chronos benötigt kein Training im klassischen Sinne (Zero-Shot)."""
+        self.data = data
+        if self.pipeline is None:
+            self.pipeline = ChronosPipeline.from_pretrained(
+                f"amazon/chronos-t5-{self.model_size}",
+                device_map=self.device,
+                torch_dtype=torch.bfloat16 if self.device == "cuda" else torch.float32,
+            )
+        self.is_fitted = True
+
+    def predict(self, steps):
+        if not self.is_fitted:
+            raise RuntimeError("Modell muss erst mit fit() initialisiert werden")
+
+        context = torch.tensor(self.data.values)
+        forecast_samples = self.pipeline.predict(context, steps)
+
+        # Den Median der Samples als Punktprognose nehmen
+        forecast_median = torch.quantile(forecast_samples, 0.5, dim=1).flatten()
+
+        return pd.Series(
+            forecast_median.numpy(),
+            index=pd.date_range(
+                self.data.index[-1] + pd.DateOffset(months=1), periods=steps, freq="M"
+            ),
+        )
+
+    @classmethod
+    def get_metadata(cls) -> ModelMetadata:
+        return ModelMetadata(
+            name="Chronos",
+            description="Ein universelles Zero-Shot-Prognosemodell basierend auf der Transformer-Architektur. "
+            "Es behandelt Zeitreihen wie Textsequenzen und ermöglicht hochpräzise Vorhersagen ohne lokales "
+            "Training, ideal für univariat-komplexe Datenmuster.",
+            category=ModelCategory.DEEP_LEARNING,
+            requires_stationarity=False,
+            is_probabilistic=True,
+            supports_seasonality=False,
+            min_data_points=12,
+            default_params={"model_size": "base"},
+        )
+
+
+class ChronosBoltModel(BaseForecastModel):
+    """Chronos-Bolt - Amazons optimiertes, schnelleres Zero-Shot Zeitreihenmodell."""
+
+    def __init__(self, model_size="base", device=None):
+        super().__init__(model_size=model_size)
+        self.model_size = model_size
+        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        self.pipeline = None
+        self.data = None
+
+    def fit(self, data, **kwargs):
+        """Zero-Shot Modell: Lädt die Bolt-Gewichte von Hugging Face."""
+        self.data = data
+        if self.pipeline is None:
+            model_id = f"amazon/chronos-bolt-{self.model_size}"
+
+            try:
+                self.pipeline = ChronosBoltPipeline.from_pretrained(
+                    model_id,
+                    device_map=self.device,
+                    torch_dtype=torch.bfloat16
+                    if self.device == "cuda"
+                    else torch.float32,
+                )
+            except TypeError as e:
+                if "input_patch_size" in str(e):
+                    try:
+                        installed_version = version("chronos-forecasting")
+                    except PackageNotFoundError:
+                        installed_version = "unbekannt"
+                    raise RuntimeError(
+                        "Chronos-Bolt ist inkompatibel mit der installierten "
+                        f"'chronos-forecasting' Version ({installed_version}). "
+                        "Bitte aktualisieren Sie die Umgebung auf eine Version, "
+                        "die Chronos-Bolt-Konfigurationsfelder wie 'input_patch_size' unterstützt."
+                    ) from e
+                raise
+        self.is_fitted = True
+
+    def predict(self, steps) -> pd.Series:
+        if not self.is_fitted:
+            raise RuntimeError("Modell muss erst mit fit() initialisiert werden")
+
+        context = torch.tensor(self.data.values)
+        forecast_samples = self.pipeline.predict(context, steps)
+        print(forecast_samples)
+
+        # Median-Berechnung (50. Quantil)
+        forecast_median = torch.quantile(forecast_samples, 0.5, dim=1).flatten()
+
+        return pd.Series(
+            forecast_median.detach()
+            .cpu()
+            .numpy(),
+            index=pd.date_range(
+                self.data.index[-1] + pd.DateOffset(months=1), periods=steps, freq="M"
+            ),
+        )
+
+    @classmethod
+    def get_metadata(cls) -> ModelMetadata:
+        return ModelMetadata(
+            name="Chronos-Bolt",
+            description="Die performance-optimierte Variante der Chronos-Familie. Durch eine effizientere Architektur erreicht das Modell eine bis zu achtfach schnellere Inferenz bei minimalem Genauigkeitsverlust, was es besonders attraktiv für ressourcenschonende Echtzeit-Anwendungen macht.",
+            category=ModelCategory.DEEP_LEARNING,
+            requires_stationarity=False,
+            is_probabilistic=True,
+            supports_seasonality=False,
+            min_data_points=12,
+            default_params={"model_size": "base"},
+        )
+
+
+class Chronos2Model(BaseForecastModel):
+    """Chronos-2 - Die zweite Generation der Amazon Zero-Shot Modelle (Encoder-Decoder)."""
+
+    def __init__(self, model_size="standard", device=None):
+        super().__init__(model_size=model_size)
+        self.model_size = model_size
+        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        self.pipeline = None
+        self.data = None
+
+    def fit(self, data, **kwargs):
+        self.data = data
+        if self.pipeline is None:
+            # Mapping der IDs für Hugging Face
+            if self.model_size == "standard" or self.model_size == "":
+                model_id = "amazon/chronos-2"
+            else:
+                model_id = f"amazon/chronos-2-{self.model_size}"
+
+            self.pipeline = Chronos2Pipeline.from_pretrained(
+                model_id,
+                device_map=self.device,
+            )
+        self.is_fitted = True
+
+    def predict(self, steps) -> pd.Series:
+        if not self.is_fitted:
+            raise RuntimeError("Modell muss erst mit fit() initialisiert werden")
+
+        context_df = self.data.reset_index()
+        context_df.columns = ["timestamp", "target"]
+        context_df["item_id"] = (
+            "H1"  # "H1" ist ein Platzhalter, wie im Quickstart-Notebook
+        )
+
+        forecast_df = self.pipeline.predict_df(
+            context_df,
+            prediction_length=steps,
+            id_column="item_id",
+            timestamp_column="timestamp",
+            target="target",
+            quantile_levels=[0.5],
+        )
+
+        forecast_values = forecast_df["0.5"].values
+        return pd.Series(
+            forecast_values,
+            index=pd.date_range(
+                self.data.index[-1] + pd.DateOffset(months=1), periods=steps, freq="M"
+            ),
+        )
+
+    @classmethod
+    def get_metadata(cls) -> ModelMetadata:
+        return ModelMetadata(
+            name="Chronos-2",
+            description="Die nächste Generation der Foundation-Models für Zeitreihen. Es bietet ein massiv erweitertes Kontextfenster für historische Daten und unterstützt erstmals nativ multivariate Eingaben sowie externe Kovariaten, um komplexe Abhängigkeiten in industriellen Prozessen abzubilden.",
+            category=ModelCategory.DEEP_LEARNING,
+            requires_stationarity=False,
+            is_probabilistic=True,
+            supports_seasonality=True,
+            min_data_points=12,
+            default_params={"model_size": "standard"},
+        )
+
+
 # Am Ende der Datei nach der EnsembleModel-Klasse einfügen:
+
 
 class TransformerModel:
     def __init__(self, window_size=12, n_heads=4, d_model=64, n_layers=2, dropout=0.1):
@@ -507,15 +756,20 @@ class TransformerModel:
         self.scaler = None
         self.model = None
         self.data = None
-        
+
     def build_model(self, input_shape):
-        from tensorflow.keras.layers import MultiHeadAttention, LayerNormalization, Dense, Input
+        from tensorflow.keras.layers import (
+            MultiHeadAttention,
+            LayerNormalization,
+            Dense,
+            Input,
+        )
         from tensorflow.keras.models import Model
         import tensorflow as tf
-        
+
         inputs = Input(shape=input_shape)
         x = inputs
-        
+
         # Transformer Encoder
         for _ in range(self.n_layers):
             # Multi-head attention
@@ -524,51 +778,66 @@ class TransformerModel:
             )(x, x)
             attention_output = tf.keras.layers.Dropout(self.dropout)(attention_output)
             x = LayerNormalization(epsilon=1e-6)(x + attention_output)
-            
+
             # Feed forward
-            ffn_output = Dense(self.d_model*4, activation="relu")(x)
+            ffn_output = Dense(self.d_model * 4, activation="relu")(x)
             ffn_output = Dense(self.d_model)(ffn_output)
             ffn_output = tf.keras.layers.Dropout(self.dropout)(ffn_output)
             x = LayerNormalization(epsilon=1e-6)(x + ffn_output)
-        
+
         # Output
-        outputs = Dense(1)(x[:, -1, :])  # Use only the last sequence element for prediction
-        
+        outputs = Dense(1)(
+            x[:, -1, :]
+        )  # Use only the last sequence element for prediction
+
         model = Model(inputs=inputs, outputs=outputs)
-        model.compile(optimizer='adam', loss='mse')
+        model.compile(optimizer="adam", loss="mse")
         return model
-        
+
     def fit(self, data):
         self.data = data
         scaler = MinMaxScaler()
         scaled_data = scaler.fit_transform(data.values.reshape(-1, 1))
         self.scaler = scaler
-        
+
         X, y = [], []
         for i in range(self.window_size, len(scaled_data)):
-            X.append(scaled_data[i-self.window_size:i, 0])
+            X.append(scaled_data[i - self.window_size : i, 0])
             y.append(scaled_data[i, 0])
         X, y = np.array(X), np.array(y)
-        
+
         # Reshape for transformer (batch_size, sequence_length, features)
         X = np.reshape(X, (X.shape[0], X.shape[1], 1))
-        
+
         self.model = self.build_model((X.shape[1], 1))
         self.model.fit(X, y, epochs=50, batch_size=32, verbose=0)
-        
+
     def predict(self, steps):
-        last_sequence = self.scaler.transform(self.data.values[-self.window_size:].reshape(-1, 1)).flatten().tolist()
+        last_sequence = (
+            self.scaler.transform(self.data.values[-self.window_size :].reshape(-1, 1))
+            .flatten()
+            .tolist()
+        )
         forecast = []
-        
+
         for _ in range(steps):
-            input_seq = np.array(last_sequence[-self.window_size:]).reshape((1, self.window_size, 1))
+            input_seq = np.array(last_sequence[-self.window_size :]).reshape(
+                (1, self.window_size, 1)
+            )
             pred = self.model.predict(input_seq, verbose=0)
-            forecast.append(pred[0,0])
-            last_sequence.append(pred[0,0])
-            
-        forecast = self.scaler.inverse_transform(np.array(forecast).reshape(-1, 1)).flatten()
-        return pd.Series(forecast, index=pd.date_range(self.data.index[-1] + pd.DateOffset(months=1), 
-                                                     periods=steps, freq='M'))
+            forecast.append(pred[0, 0])
+            last_sequence.append(pred[0, 0])
+
+        forecast = self.scaler.inverse_transform(
+            np.array(forecast).reshape(-1, 1)
+        ).flatten()
+        return pd.Series(
+            forecast,
+            index=pd.date_range(
+                self.data.index[-1] + pd.DateOffset(months=1), periods=steps, freq="M"
+            ),
+        )
+
 
 class EnsembleModel:
     def __init__(self, models):

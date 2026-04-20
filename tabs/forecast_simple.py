@@ -1,22 +1,14 @@
 # forecast_simple.py
-import streamlit as st
-import pandas as pd
 from datetime import datetime
 from setup_module.helpers import *
 from setup_module.session_state import get_app_state
-from setup_module.error_handler import UserFeedback
 from setup_module.logging_config import log_data_operation
 from setup_module.forecast_helpers import (
     train_forecast_model,
-    create_forecast_chart,
-    calculate_forecast_metrics,
-    display_forecast_metrics,
-    get_available_models,
-    create_model_selection_ui
+    create_forecast_chart
 )
 # ✨ NEU: Model Registry statt direkter Imports
 from setup_module.model_registry import get_model_registry
-from app.models import EnsembleModel  # Nur Ensemble noch direkt
 
 # ✨ NEUE UX: UI Components
 from setup_module.design_system import UI
@@ -24,7 +16,8 @@ from setup_module.ui_helpers import display_model_selector_with_info, safe_execu
 # ✨ SMART DEFAULTS: Intelligente Empfehlungen
 from setup_module.smart_defaults import SmartDefaults
 # ✨ CONTEXTUAL HELP: Hilfe-System für Produktionsplaner
-from setup_module.help_system import HelpSystem, show_smart_warning, show_parameter_help
+from setup_module.help_system import HelpSystem, show_smart_warning
+from setup_module.fanchart import render_fanchart_settings_ui, apply_fanchart_to_figure
 
 
 def display_tab():
@@ -176,9 +169,14 @@ def display_tab():
         show_smart_warning(model_warning, warning_type="info")
 
     st.markdown("---")
+    fanchart_config = render_fanchart_settings_ui(key_prefix="forecast_simple")
+
+    st.markdown("---")
     
     # ✨ PROFESSIONELLER: Button mit Design System
     if UI.primary_button("Prognose erstellen", key='forecast_simple_run'):
+        if not fanchart_config.get("is_valid", True):
+            return
         with display_spinner("Erstelle Prognose..."):
             # ✨ SAFE EXECUTE: Error Handling
             success, result = safe_execute(
@@ -202,7 +200,7 @@ def display_tab():
             )
             
             # Ergebnisse anzeigen
-            display_forecast_results(result, selected_product, forecast_horizon)
+            display_forecast_results(result, selected_product, forecast_horizon, fanchart_config)
 
 
 def run_forecast_simple(state, selected_product, forecast_horizon, selected_model):
@@ -242,11 +240,12 @@ def run_forecast_simple(state, selected_product, forecast_horizon, selected_mode
         'product_data': product_data,
         'forecast': forecast,
         'model_name': selected_model,
-        'model': model
+        'model': model,
+        'model_class': model_class
     }
 
 
-def display_forecast_results(result, selected_product, forecast_horizon):
+def display_forecast_results(result, selected_product, forecast_horizon, fanchart_config):
     """
     Zeigt Prognose-Ergebnisse an
     
@@ -258,9 +257,10 @@ def display_forecast_results(result, selected_product, forecast_horizon):
     product_data = result['product_data']
     forecast = result['forecast']
     model_name = result['model_name']
+    model_class = result.get('model_class')
     
     UI.section_header("Prognose-Ergebnisse", help_text="Visualisierung und Download der Prognosewerte")
-    
+
     # Visualisierung
     forecasts = {model_name: forecast}
     fig = create_forecast_chart(
@@ -270,6 +270,16 @@ def display_forecast_results(result, selected_product, forecast_horizon):
         title=f"Prognose für {selected_product}",
         product_name=selected_product
     )
+    fig = apply_fanchart_to_figure(
+        fig=fig,
+        historical_data=product_data,
+        forecast=forecast,
+        config=fanchart_config,
+        model_name=model_name,
+        model_class=model_class,
+        train_model_func=train_forecast_model
+    )
+
     st.plotly_chart(fig, use_container_width=True)
 
     # ✨ NEUE UX: Export Dialog
@@ -288,8 +298,7 @@ def display_forecast_results(result, selected_product, forecast_horizon):
 def auto_select_models(product_data):
     """Automatische Modellauswahl basierend auf Dateneigenschaften"""
     from statsmodels.tsa.stattools import adfuller, acf
-    import pandas as pd
-    
+
     # Stationaritätstest
     adf_result = adfuller(product_data.values)
     is_stationary = adf_result[1] < 0.05

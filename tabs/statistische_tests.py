@@ -100,14 +100,18 @@ def interpret_p_value(p_value, test_type="Test"):
     - test_type (str): Der Typ des Tests (optional, Standard: "Test").
     """
     if p_value < 0.05:
-        UserFeedback.success(f"P-Wert ist klein (weniger als 0.05). Die Nullhypothese des {test_type} wird abgelehnt.")
+        
         if test_type == "ADF-Test":
+            UserFeedback.success(f"P-Wert ist klein (weniger als 0.05). Die Nullhypothese des {test_type} wird abgelehnt.")
             UserFeedback.info("Das bedeutet, dass die Zeitreihe stationär ist.")
         elif test_type == "KPSS-Test":
+            UserFeedback.warning(f"P-Wert ist klein (weniger als 0.05). Die Nullhypothese des {test_type} wird abgelehnt.")
             UserFeedback.info("Das bedeutet, dass die Zeitreihe nicht stationär ist.")
     else:
-        UserFeedback.warning(f"P-Wert ist groß (mehr als 0.05). Die Nullhypothese des {test_type} kann nicht abgelehnt werden.")
+        
         if test_type == "ADF-Test":
+            UserFeedback.warning(f"P-Wert ist groß (mehr als 0.05). Die Nullhypothese des {test_type} kann nicht abgelehnt werden.")
             UserFeedback.info("Das bedeutet, dass die Zeitreihe nicht stationär ist.")
         elif test_type == "KPSS-Test":
+            UserFeedback.success(f"P-Wert ist groß (mehr als 0.05). Die Nullhypothese des {test_type} kann nicht abgelehnt werden.")
             UserFeedback.info("Das bedeutet, dass die Zeitreihe stationär ist.")

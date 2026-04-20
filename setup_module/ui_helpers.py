@@ -130,7 +130,8 @@ def safe_execute(
 def run_with_progress(
     tasks: List[Callable],
     task_names: List[str],
-    show_eta: bool = False
+    show_eta: bool = False,
+    fail_fast: bool = True
 ) -> List[Any]:
     """
     Führt Tasks mit konsistentem Progress-Feedback aus
@@ -139,6 +140,7 @@ def run_with_progress(
         tasks: Liste von auszuführenden Funktionen
         task_names: Namen der Tasks für Anzeige
         show_eta: Geschätzte Restzeit anzeigen
+        fail_fast: Bei Task-Fehler sofort mit Original-Exception abbrechen
         
     Returns:
         Liste der Ergebnisse
@@ -173,7 +175,9 @@ def run_with_progress(
             result = task()
             results.append(result)
         except Exception as e:
-            logger.error(f"Error in task '{name}': {str(e)}")
+            logger.error(f"Error in task '{name}': {str(e)}", exc_info=True)
+            if fail_fast:
+                raise RuntimeError(f"Fehler in Task '{name}': {e}") from e
             results.append(None)
         
         # Progress aktualisieren
@@ -657,7 +661,7 @@ def display_model_selector_with_info(
                 
                 # Default Parameters
                 if metadata.default_params:
-                    with st.expander("Standard-Parameter"):
+                    with st.container(border=True):
                         st.json(metadata.default_params)
             
             return selected_model, metadata.__dict__

@@ -15,6 +15,7 @@ from setup_module.ui_helpers import (
     safe_execute,
     export_dialog
 )
+from setup_module.fanchart import render_fanchart_settings_ui, apply_fanchart_to_figure
 
 UI = UIComponents()
 
@@ -105,9 +106,14 @@ def display_tab():
         key='forecast_complex_models',
         help="Wählen Sie ein oder mehrere multivariate Modelle für die Prognose"
     )
+
+    st.markdown("---")
+    fanchart_config = render_fanchart_settings_ui(key_prefix="forecast_complex")
     
     # ✨ NEU: Professioneller Button
     if UI.primary_button("Prognose durchführen", key='forecast_complex_btn', help="Erstellt die Prognose mit den gewählten Modellen"):
+        if not fanchart_config.get("is_valid", True):
+            return
         # Clear previous results first
         if 'forecast_complex_results' in st.session_state:
             del st.session_state['forecast_complex_results']
@@ -215,9 +221,9 @@ def display_tab():
     # Display results section - only runs if we have results
     if 'forecast_complex_results' in st.session_state and st.session_state.get('forecast_status') == 'success':
         display_forecast_results(data, st.session_state['forecast_complex_results'], 
-                               st.session_state['forecast_complex_target'])
+                               st.session_state['forecast_complex_target'], fanchart_config)
 
-def display_forecast_results(data, forecast_results, target_col):
+def display_forecast_results(data, forecast_results, target_col, fanchart_config):
     """Helper function to display forecast results"""
     st.subheader("Prognoseergebnisse")
     
@@ -240,6 +246,13 @@ def display_forecast_results(data, forecast_results, target_col):
             mode='lines',
             name=f'Prognose ({name})'
         ))
+        fig = apply_fanchart_to_figure(
+            fig=fig,
+            historical_data=data[target_col],
+            forecast=forecast,
+            config=fanchart_config,
+            model_name=name
+        )
 
     fig.update_layout(
         title=f"Prognose für {target_col}",
