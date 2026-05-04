@@ -33,7 +33,7 @@ class SeasonalNaiveModel(BaseForecastModel):
         self.data = data
         self.is_fitted = True
 
-    def predict(self, steps):
+    def predict(self, steps) -> pd.Series:
         if not self.is_fitted:
             raise RuntimeError("Modell muss erst mit fit() trainiert werden")
         last_season = self.data.iloc[-self.season_length :].values
@@ -69,7 +69,7 @@ class MovingAverageModel(BaseForecastModel):
         self.data = data
         self.is_fitted = True
 
-    def predict(self, steps):
+    def predict(self, steps) -> pd.Series:
         if not self.is_fitted:
             raise RuntimeError("Modell muss erst mit fit() trainiert werden")
         mean_value = self.data.iloc[-self.window :].mean()
@@ -105,7 +105,7 @@ class ARIMAModel(BaseForecastModel):
         self.model = ARIMA(data, order=self.order).fit()
         self.is_fitted = True
 
-    def predict(self, steps):
+    def predict(self, steps) -> pd.Series:
         if not self.is_fitted:
             raise RuntimeError("Modell muss erst mit fit() trainiert werden")
         forecast = self.model.forecast(steps=steps)
@@ -162,7 +162,7 @@ class ProphetModel(BaseForecastModel):
         self.model.fit(prophet_data)
         self.is_fitted = True
 
-    def predict(self, steps):
+    def predict(self, steps) -> pd.Series:
         if not self.is_fitted:
             raise RuntimeError("Modell muss erst mit fit() trainiert werden")
         future_dates = pd.date_range(
@@ -228,7 +228,7 @@ class LSTMModel(BaseForecastModel):
         self.model.fit(X, y, epochs=self.epochs, batch_size=self.batch_size, verbose=0)
         self.is_fitted = True
 
-    def predict(self, steps):
+    def predict(self, steps) -> pd.Series:
         if not self.is_fitted:
             raise RuntimeError("Modell muss erst mit fit() trainiert werden")
         last_sequence = (
@@ -308,7 +308,7 @@ class GRUModel(BaseForecastModel):
         self.model.fit(X, y, epochs=self.epochs, batch_size=self.batch_size, verbose=0)
         self.is_fitted = True
 
-    def predict(self, steps):
+    def predict(self, steps) -> pd.Series:
         if not self.is_fitted:
             raise RuntimeError("Modell muss erst mit fit() trainiert werden")
         last_sequence = (
@@ -357,7 +357,7 @@ class SESModel(BaseForecastModel):
         self.data = data
         self.is_fitted = True
 
-    def predict(self, steps):
+    def predict(self, steps) -> pd.Series:
         if not self.is_fitted:
             raise RuntimeError("Modell muss erst mit fit() trainiert werden")
         forecast = self.model.forecast(steps)
@@ -395,7 +395,7 @@ class SARIMAModel(BaseForecastModel):
         ).fit()
         self.is_fitted = True
 
-    def predict(self, steps):
+    def predict(self, steps) -> pd.Series:
         if not self.is_fitted:
             raise RuntimeError("Modell muss erst mit fit() trainiert werden")
         forecast = self.model.forecast(steps=steps)
@@ -430,7 +430,7 @@ class HoltWintersModel(BaseForecastModel):
         self.data = data
         self.is_fitted = True
 
-    def predict(self, steps):
+    def predict(self, steps) -> pd.Series:
         if not self.is_fitted:
             raise RuntimeError("Modell muss erst mit fit() trainiert werden")
         forecast = self.model.forecast(steps)
@@ -470,7 +470,7 @@ class XGBoostModel(BaseForecastModel):
         self.model.fit(X, y)
         self.is_fitted = True
 
-    def predict(self, steps):
+    def predict(self, steps) -> pd.Series:
         if not self.is_fitted:
             raise RuntimeError("Modell muss erst mit fit() trainiert werden")
         last_sequence = self.data.values[-self.window_size :].tolist()
@@ -521,7 +521,7 @@ class RandomForestModel(BaseForecastModel):
         self.model.fit(X, y)
         self.is_fitted = True
 
-    def predict(self, steps):
+    def predict(self, steps) -> pd.Series:
         if not self.is_fitted:
             raise RuntimeError("Modell muss erst mit fit() trainiert werden")
         last_sequence = self.data.values[-self.window_size :].tolist()
@@ -556,7 +556,9 @@ class ChronosModel(BaseForecastModel):
     def __init__(self, model_size="base", device=None):
         super().__init__(model_size=model_size)
         self.model_size = model_size
-        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu") # Automatische Geräteerkennung (GPU falls vorhanden)
+        self.device = device or (
+            "cuda" if torch.cuda.is_available() else "cpu"
+        )  # Automatische Geräteerkennung (GPU falls vorhanden)
         self.pipeline = None
         self.data = None
 
@@ -571,7 +573,7 @@ class ChronosModel(BaseForecastModel):
             )
         self.is_fitted = True
 
-    def predict(self, steps):
+    def predict(self, steps) -> pd.Series:
         if not self.is_fitted:
             raise RuntimeError("Modell muss erst mit fit() initialisiert werden")
 
@@ -655,9 +657,7 @@ class ChronosBoltModel(BaseForecastModel):
         forecast_median = torch.quantile(forecast_samples, 0.5, dim=1).flatten()
 
         return pd.Series(
-            forecast_median.detach()
-            .cpu()
-            .numpy(),
+            forecast_median.detach().cpu().numpy(),
             index=pd.date_range(
                 self.data.index[-1] + pd.DateOffset(months=1), periods=steps, freq="M"
             ),
@@ -746,6 +746,100 @@ class Chronos2Model(BaseForecastModel):
 # Am Ende der Datei nach der EnsembleModel-Klasse einfügen:
 
 
+class TiRexModel(BaseForecastModel):
+    """TiRex - NX-AI Zero-Shot Zeitreihenmodell auf Basis von xLSTM."""
+
+    def __init__(self, model_id="NX-AI/TiRex", device=None, backend=None):
+        super().__init__(model_id=model_id, backend=backend)
+        self.model_id = model_id
+        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        self.backend = backend
+        self.model = None
+        self.data = None
+
+    def fit(self, data, **kwargs):
+        """TiRex ist ein Zero-Shot Modell und lädt nur die vortrainierten Gewichte."""
+        self.data = data
+        if self.model is None:
+            try:
+                from tirex import load_model
+            except ImportError as e:
+                raise RuntimeError(
+                    "TiRex benötigt das Paket 'tirex-ts'. Installieren Sie es mit "
+                    "'pip install tirex-ts'."
+                ) from e
+
+            load_kwargs = {}
+            if self.backend is not None:
+                load_kwargs["backend"] = self.backend
+
+            self.model = load_model(self.model_id, **load_kwargs)
+            if hasattr(self.model, "to"):
+                self.model.to(self.device)
+            if hasattr(self.model, "eval"):
+                self.model.eval()
+
+        self.is_fitted = True
+
+    def predict(self, steps) -> pd.Series:
+        if not self.is_fitted:
+            raise RuntimeError("Modell muss erst mit fit() initialisiert werden")
+
+        values = np.asarray(self.data.values, dtype=np.float32).reshape(1, -1)
+        context = torch.tensor(values, dtype=torch.float32, device=self.device)
+
+        with torch.no_grad():
+            quantiles, mean = self.model.forecast(
+                context=context,
+                prediction_length=steps,
+            )
+
+        forecast = mean.reshape(-1).detach().cpu().numpy()
+        return pd.Series(
+            forecast,
+            index=pd.date_range(
+                self.data.index[-1] + pd.DateOffset(months=1), periods=steps, freq="M"
+            ),
+        )
+
+    def predict_quantiles(self, steps):
+        if not self.is_fitted:
+            raise RuntimeError("Modell muss erst mit fit() initialisiert werden")
+
+        values = np.asarray(self.data.values, dtype=np.float32).reshape(1, -1)
+        context = torch.tensor(values, dtype=torch.float32, device=self.device)
+
+        with torch.no_grad():
+            quantiles, mean = self.model.forecast(
+                context=context,
+                prediction_length=steps,
+            )
+
+        forecast_index = pd.date_range(
+            self.data.index[-1] + pd.DateOffset(months=1), periods=steps, freq="M"
+        )
+        return {
+            "mean": pd.Series(
+                mean.reshape(-1).detach().cpu().numpy(), index=forecast_index
+            ),
+            "quantiles": quantiles.detach().cpu().numpy(),
+        }
+
+    @classmethod
+    def get_metadata(cls) -> ModelMetadata:
+        return ModelMetadata(
+            name="TiRex",
+            description="NX-AI TiRex - kompaktes xLSTM-basiertes Zero-Shot Foundation Model "
+            "für Zeitreihenprognosen mit Punkt- und Quantilschätzungen.",
+            category=ModelCategory.DEEP_LEARNING,
+            requires_stationarity=False,
+            is_probabilistic=True,
+            supports_seasonality=True,
+            min_data_points=12,
+            default_params={"model_id": "NX-AI/TiRex", "backend": None},
+        )
+
+
 class TransformerModel:
     def __init__(self, window_size=12, n_heads=4, d_model=64, n_layers=2, dropout=0.1):
         self.window_size = window_size
@@ -812,7 +906,7 @@ class TransformerModel:
         self.model = self.build_model((X.shape[1], 1))
         self.model.fit(X, y, epochs=50, batch_size=32, verbose=0)
 
-    def predict(self, steps):
+    def predict(self, steps) -> pd.Series:
         last_sequence = (
             self.scaler.transform(self.data.values[-self.window_size :].reshape(-1, 1))
             .flatten()
