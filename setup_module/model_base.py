@@ -49,6 +49,7 @@ class ModelMetadata:
         supports_seasonality: True wenn Modell Saisonalität modellieren kann
         requires_long_history: True wenn viele Datenpunkte nötig
         is_probabilistic: True wenn Modell Konfidenzintervalle liefert
+        supports_quantiles: True wenn Modell native Quantil-Prognosen für Fan-Charts liefert
         min_data_points: Minimum erforderliche Datenpunkte
         default_params: Default-Parameter für Modell-Initialisierung
     """
@@ -59,6 +60,7 @@ class ModelMetadata:
     supports_seasonality: bool = False
     requires_long_history: bool = False
     is_probabilistic: bool = False
+    supports_quantiles: bool = False
     min_data_points: int = 10
     default_params: Dict[str, Any] = field(default_factory=dict)
     
@@ -156,6 +158,15 @@ class BaseForecastModel(ABC):
             ModelMetadata mit allen Modell-Eigenschaften
         """
         pass
+
+    @classmethod
+    def supports_native_quantiles(cls) -> bool:
+        """Gibt zurück, ob das Modell native Quantil-Prognosen unterstützt.
+
+        Returns:
+            True wenn ``supports_quantiles`` in den Modell-Metadaten gesetzt ist.
+        """
+        return cls.get_metadata().supports_quantiles
     
     def __str__(self):
         """String representation."""

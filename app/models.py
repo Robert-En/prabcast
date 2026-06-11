@@ -702,32 +702,58 @@ class Chronos2Model(BaseForecastModel):
             )
         self.is_fitted = True
 
-    def predict(self, steps) -> pd.Series:
-        if not self.is_fitted:
-            raise RuntimeError("Modell muss erst mit fit() initialisiert werden")
-
+    def _build_context_df(self) -> pd.DataFrame:
         context_df = self.data.reset_index()
         context_df.columns = ["timestamp", "target"]
         context_df["item_id"] = (
             "H1"  # "H1" ist ein Platzhalter, wie im Quickstart-Notebook
         )
+        return context_df
 
+    def _forecast_index(self, steps: int) -> pd.DatetimeIndex:
+        return pd.date_range(
+            self.data.index[-1] + pd.DateOffset(months=1), periods=steps, freq="M"
+        )
+
+    @staticmethod
+    def _resolve_quantile_column(forecast_df: pd.DataFrame, level: float) -> str:
+        for candidate in (str(level), f"{level:.3f}", f"{level:.2f}", f"{level:.1f}"):
+            if candidate in forecast_df.columns:
+                return candidate
+        raise KeyError(
+            f"Quantil {level} nicht in Spalten {list(forecast_df.columns)} gefunden"
+        )
+
+    def predict(self, steps) -> pd.Series:
+        if not self.is_fitted:
+            raise RuntimeError("Modell muss erst mit fit() initialisiert werden")
+
+        quantiles = self.predict_quantiles(steps, [0.5])
+        return quantiles[0.5]
+
+    def predict_quantiles(
+        self, steps: int, quantile_levels: list[float]
+    ) -> dict[float, pd.Series]:
+        if not self.is_fitted:
+            raise RuntimeError("Modell muss erst mit fit() initialisiert werden")
+
+        unique_levels = sorted(set(quantile_levels))
         forecast_df = self.pipeline.predict_df(
-            context_df,
+            self._build_context_df(),
             prediction_length=steps,
             id_column="item_id",
             timestamp_column="timestamp",
             target="target",
-            quantile_levels=[0.5],
+            quantile_levels=unique_levels,
         )
-
-        forecast_values = forecast_df["0.5"].values
-        return pd.Series(
-            forecast_values,
-            index=pd.date_range(
-                self.data.index[-1] + pd.DateOffset(months=1), periods=steps, freq="M"
-            ),
-        )
+        forecast_index = self._forecast_index(steps)
+        return {
+            level: pd.Series(
+                forecast_df[self._resolve_quantile_column(forecast_df, level)].values,
+                index=forecast_index,
+            )
+            for level in quantile_levels
+        }
 
     @classmethod
     def get_metadata(cls) -> ModelMetadata:
@@ -737,6 +763,7 @@ class Chronos2Model(BaseForecastModel):
             category=ModelCategory.DEEP_LEARNING,
             requires_stationarity=False,
             is_probabilistic=True,
+            supports_quantiles=True,
             supports_seasonality=True,
             min_data_points=12,
             default_params={"model_size": "standard"},

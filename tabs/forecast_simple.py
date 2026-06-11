@@ -1,5 +1,6 @@
 # forecast_simple.py
 from datetime import datetime
+from typing import Dict, Any
 from setup_module.helpers import *
 from setup_module.session_state import get_app_state
 from setup_module.logging_config import log_data_operation
@@ -203,7 +204,7 @@ def display_tab():
             display_forecast_results(result, selected_product, forecast_horizon, fanchart_config)
 
 
-def run_forecast_simple(state, selected_product, forecast_horizon, selected_model):
+def run_forecast_simple(state, selected_product, forecast_horizon, selected_model) -> Dict[str, Any]:
     """
     Führt die Prognose aus - separiert für besseres Error Handling
     
@@ -245,7 +246,7 @@ def run_forecast_simple(state, selected_product, forecast_horizon, selected_mode
     }
 
 
-def display_forecast_results(result, selected_product, forecast_horizon, fanchart_config):
+def display_forecast_results(result, selected_product, forecast_horizon, fanchart_config: dict)-> None:
     """
     Zeigt Prognose-Ergebnisse an
     
@@ -253,6 +254,7 @@ def display_forecast_results(result, selected_product, forecast_horizon, fanchar
         result: Dict mit Prognose-Daten
         selected_product: Produktname
         forecast_horizon: Prognosehorizont
+        fanchart_config: Konfiguration für Fanchart
     """
     product_data = result['product_data']
     forecast = result['forecast']
@@ -277,7 +279,8 @@ def display_forecast_results(result, selected_product, forecast_horizon, fanchar
         config=fanchart_config,
         model_name=model_name,
         model_class=model_class,
-        train_model_func=train_forecast_model
+        train_model_func=train_forecast_model,
+        fitted_model=result.get("model"),
     )
 
     st.plotly_chart(fig, use_container_width=True)
