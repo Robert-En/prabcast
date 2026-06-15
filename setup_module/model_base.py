@@ -145,6 +145,28 @@ class BaseForecastModel(ABC):
             RuntimeError: Wenn Modell nicht fitted ist
         """
         pass
+
+    def predict_quantiles(
+        self, steps: int, quantile_levels: list[float]
+    ) -> dict[float, pd.Series]:
+        """Optionale native Quantil-Prognosen für Fan-Charts.
+
+        Nur Modelle mit ``supports_quantiles=True`` in ``get_metadata()`` implementieren
+        diese Methode. Rückgabe: Mapping Quantil-Stufe → ``pd.Series`` der Länge ``steps``.
+
+        Args:
+            steps: Anzahl Prognose-Horizonte.
+            quantile_levels: Angefragte Quantil-Stufen (z. B. 0.25, 0.975).
+
+        Returns:
+            Dictionary mit Quantil-Stufen als Keys und Prognose-Serien als Values.
+
+        Raises:
+            NotImplementedError: Wenn das Modell keine nativen Quantile unterstützt.
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} unterstützt keine nativen Quantil-Prognosen."
+        )
     
     @classmethod
     @abstractmethod

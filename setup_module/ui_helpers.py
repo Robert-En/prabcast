@@ -652,6 +652,7 @@ def display_model_selector_with_info(
                     st.markdown(f"**Stationarität erforderlich:** {'Ja' if metadata.requires_stationarity else 'Nein'}")
                     st.markdown(f"**Unterstützt Saisonalität:** {'Ja' if metadata.supports_seasonality else 'Nein'}")
                     st.markdown(f"**Benötigt lange Historie:** {'Ja' if metadata.requires_long_history else 'Nein'}")
+                    st.markdown(f"**Probabilistisches Modell:** {'Ja' if metadata.is_probabilistic else 'Nein'}")
                 
                 # Recommendation
                 if selected_model in suitable_models:
@@ -660,9 +661,11 @@ def display_model_selector_with_info(
                     st.warning("Dieses Modell erfüllt möglicherweise nicht alle Anforderungen Ihrer Daten")
                 
                 # Default Parameters
-                if metadata.default_params:
-                    with st.container(border=True):
-                        st.json(metadata.default_params)
+                show_default_params = False
+                if show_default_params:
+                    if metadata.default_params:
+                        with st.container(border=True):
+                            st.json(metadata.default_params)
             
             return selected_model, metadata.__dict__
         

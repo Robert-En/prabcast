@@ -3,9 +3,10 @@ import numpy as np
 import pandas as pd
 from statsmodels.tsa.arima.model import ARIMA
 from prophet import Prophet
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense, GRU
-from tensorflow.keras import backend as K
+from keras.models import Sequential
+from keras.layers import LSTM, Dense, GRU
+
+from keras import backend as K
 from statsmodels.tsa.holtwinters import SimpleExpSmoothing, ExponentialSmoothing
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 from xgboost import XGBRegressor
@@ -18,6 +19,15 @@ from importlib.metadata import PackageNotFoundError, version
 
 # Model Management
 from setup_module.model_base import BaseForecastModel, ModelMetadata, ModelCategory
+from setup_module.quantile_helpers import (
+    TIREX_FIXED_QUANTILE_LEVELS,
+    monthly_forecast_index,
+    normal_quantiles_from_forecast,
+    sample_quantiles_from_tensor,
+    unique_confidence_levels,
+    confidence_level_from_quantile,
+    interpolate_quantile_levels,
+)
 
 warnings.filterwarnings("ignore")  # Suppress warnings for cleaner output
 
@@ -108,8 +118,22 @@ class ARIMAModel(BaseForecastModel):
     def predict(self, steps) -> pd.Series:
         if not self.is_fitted:
             raise RuntimeError("Modell muss erst mit fit() trainiert werden")
-        forecast = self.model.forecast(steps=steps)
-        return forecast
+        return self.predict_quantiles(steps, [0.5])[0.5]
+
+    def predict_quantiles(
+        self, steps: int, quantile_levels: list[float]
+    ) -> dict[float, pd.Series]:
+        if not self.is_fitted:
+            raise RuntimeError("Modell muss erst mit fit() trainiert werden")
+
+        forecast_result = self.model.get_forecast(steps=steps)
+        index = monthly_forecast_index(self.data, steps)
+        return normal_quantiles_from_forecast(
+            mean=forecast_result.predicted_mean,
+            se=forecast_result.se_mean,
+            levels=quantile_levels,
+            index=index,
+        )
 
     @classmethod
     def get_metadata(cls) -> ModelMetadata:
@@ -119,6 +143,7 @@ class ARIMAModel(BaseForecastModel):
             category=ModelCategory.STATISTICAL,
             requires_stationarity=True,
             is_probabilistic=True,
+            supports_quantiles=True,
             min_data_points=30,
             default_params={"order": (1, 1, 1)},
         )
@@ -150,12 +175,20 @@ class ProphetModel(BaseForecastModel):
         self.data = None
         self.params = {}
 
-    def fit(self, data, yearly_seasonality="auto", weekly_seasonality="auto", **kwargs):
+    def fit(
+        self,
+        data,
+        yearly_seasonality="auto",
+        weekly_seasonality="auto",
+        interval_width=0.80,
+        **kwargs,
+    ):
         _, prophet_data = standardize_data(data)
         self.data = data
         self.params = {
             "yearly_seasonality": yearly_seasonality,
             "weekly_seasonality": weekly_seasonality,
+            "interval_width": interval_width,
             **kwargs,
         }
         self.model = Prophet(**self.params)
@@ -165,12 +198,47 @@ class ProphetModel(BaseForecastModel):
     def predict(self, steps) -> pd.Series:
         if not self.is_fitted:
             raise RuntimeError("Modell muss erst mit fit() trainiert werden")
-        future_dates = pd.date_range(
-            start=self.data.index[-1] + pd.DateOffset(months=1), periods=steps, freq="M"
-        )
+        return self.predict_quantiles(steps, [0.5])[0.5]
+
+    def predict_quantiles(
+        self, steps: int, quantile_levels: list[float]
+    ) -> dict[float, pd.Series]:
+        if not self.is_fitted:
+            raise RuntimeError("Modell muss erst mit fit() trainiert werden")
+
+        future_dates = monthly_forecast_index(self.data, steps)
         future_df = pd.DataFrame({"ds": future_dates})
-        forecast = self.model.predict(future_df)
-        return pd.Series(forecast["yhat"].values, index=future_dates)
+
+        quantile_to_confidence = {
+            q: confidence_level_from_quantile(q) for q in quantile_levels
+        }
+        forecasts_by_level: dict[float, pd.DataFrame] = {}
+        point_forecast = None
+        if any(abs(q - 0.5) < 1e-9 for q in quantile_levels):
+            self.model.interval_width = self.params.get("interval_width", 0.80)
+            point_forecast = self.model.predict(future_df)
+
+        for confidence_level in unique_confidence_levels(
+            [q for q in quantile_levels if abs(q - 0.5) >= 1e-9]
+        ):
+            self.model.interval_width = confidence_level
+            forecasts_by_level[confidence_level] = self.model.predict(future_df)
+
+        result: dict[float, pd.Series] = {}
+        for q in quantile_levels:
+            if abs(q - 0.5) < 1e-9:
+                result[q] = pd.Series(point_forecast["yhat"].values, index=future_dates)
+            elif q < 0.5:
+                result[q] = pd.Series(
+                    forecasts_by_level[quantile_to_confidence[q]]["yhat_lower"].values,
+                    index=future_dates,
+                )
+            else:
+                result[q] = pd.Series(
+                    forecasts_by_level[quantile_to_confidence[q]]["yhat_upper"].values,
+                    index=future_dates,
+                )
+        return result
 
     @classmethod
     def get_metadata(cls) -> ModelMetadata:
@@ -180,8 +248,9 @@ class ProphetModel(BaseForecastModel):
             category=ModelCategory.STATISTICAL,
             supports_seasonality=True,
             is_probabilistic=True,
+            supports_quantiles=True,
             min_data_points=20,
-            default_params={},
+            default_params={"interval_width": 0.80},
         )
 
 
@@ -398,8 +467,22 @@ class SARIMAModel(BaseForecastModel):
     def predict(self, steps) -> pd.Series:
         if not self.is_fitted:
             raise RuntimeError("Modell muss erst mit fit() trainiert werden")
-        forecast = self.model.forecast(steps=steps)
-        return forecast
+        return self.predict_quantiles(steps, [0.5])[0.5]
+
+    def predict_quantiles(
+        self, steps: int, quantile_levels: list[float]
+    ) -> dict[float, pd.Series]:
+        if not self.is_fitted:
+            raise RuntimeError("Modell muss erst mit fit() trainiert werden")
+
+        forecast_result = self.model.get_forecast(steps=steps)
+        index = monthly_forecast_index(self.data, steps)
+        return normal_quantiles_from_forecast(
+            mean=forecast_result.predicted_mean,
+            se=forecast_result.se_mean,
+            levels=quantile_levels,
+            index=index,
+        )
 
     @classmethod
     def get_metadata(cls) -> ModelMetadata:
@@ -410,6 +493,7 @@ class SARIMAModel(BaseForecastModel):
             requires_stationarity=True,
             supports_seasonality=True,
             is_probabilistic=True,
+            supports_quantiles=True,
             min_data_points=40,
             default_params={"order": (1, 1, 1), "seasonal_order": (1, 1, 1, 12)},
         )
@@ -576,18 +660,19 @@ class ChronosModel(BaseForecastModel):
     def predict(self, steps) -> pd.Series:
         if not self.is_fitted:
             raise RuntimeError("Modell muss erst mit fit() initialisiert werden")
+        return self.predict_quantiles(steps, [0.5])[0.5]
+
+    def predict_quantiles(
+        self, steps: int, quantile_levels: list[float]
+    ) -> dict[float, pd.Series]:
+        if not self.is_fitted:
+            raise RuntimeError("Modell muss erst mit fit() initialisiert werden")
 
         context = torch.tensor(self.data.values)
         forecast_samples = self.pipeline.predict(context, steps)
-
-        # Den Median der Samples als Punktprognose nehmen
-        forecast_median = torch.quantile(forecast_samples, 0.5, dim=1).flatten()
-
-        return pd.Series(
-            forecast_median.numpy(),
-            index=pd.date_range(
-                self.data.index[-1] + pd.DateOffset(months=1), periods=steps, freq="M"
-            ),
+        index = monthly_forecast_index(self.data, steps)
+        return sample_quantiles_from_tensor(
+            forecast_samples, quantile_levels, index, sample_dim=1
         )
 
     @classmethod
@@ -600,6 +685,7 @@ class ChronosModel(BaseForecastModel):
             category=ModelCategory.DEEP_LEARNING,
             requires_stationarity=False,
             is_probabilistic=True,
+            supports_quantiles=True,
             supports_seasonality=False,
             min_data_points=12,
             default_params={"model_size": "base"},
@@ -648,19 +734,19 @@ class ChronosBoltModel(BaseForecastModel):
     def predict(self, steps) -> pd.Series:
         if not self.is_fitted:
             raise RuntimeError("Modell muss erst mit fit() initialisiert werden")
+        return self.predict_quantiles(steps, [0.5])[0.5]
+
+    def predict_quantiles(
+        self, steps: int, quantile_levels: list[float]
+    ) -> dict[float, pd.Series]:
+        if not self.is_fitted:
+            raise RuntimeError("Modell muss erst mit fit() initialisiert werden")
 
         context = torch.tensor(self.data.values)
         forecast_samples = self.pipeline.predict(context, steps)
-        print(forecast_samples)
-
-        # Median-Berechnung (50. Quantil)
-        forecast_median = torch.quantile(forecast_samples, 0.5, dim=1).flatten()
-
-        return pd.Series(
-            forecast_median.detach().cpu().numpy(),
-            index=pd.date_range(
-                self.data.index[-1] + pd.DateOffset(months=1), periods=steps, freq="M"
-            ),
+        index = monthly_forecast_index(self.data, steps)
+        return sample_quantiles_from_tensor(
+            forecast_samples, quantile_levels, index, sample_dim=1
         )
 
     @classmethod
@@ -671,6 +757,7 @@ class ChronosBoltModel(BaseForecastModel):
             category=ModelCategory.DEEP_LEARNING,
             requires_stationarity=False,
             is_probabilistic=True,
+            supports_quantiles=True,
             supports_seasonality=False,
             min_data_points=12,
             default_params={"model_size": "base"},
@@ -711,9 +798,7 @@ class Chronos2Model(BaseForecastModel):
         return context_df
 
     def _forecast_index(self, steps: int) -> pd.DatetimeIndex:
-        return pd.date_range(
-            self.data.index[-1] + pd.DateOffset(months=1), periods=steps, freq="M"
-        )
+        return monthly_forecast_index(self.data, steps)
 
     @staticmethod
     def _resolve_quantile_column(forecast_df: pd.DataFrame, level: float) -> str:
@@ -811,25 +896,11 @@ class TiRexModel(BaseForecastModel):
     def predict(self, steps) -> pd.Series:
         if not self.is_fitted:
             raise RuntimeError("Modell muss erst mit fit() initialisiert werden")
+        return self.predict_quantiles(steps, [0.5])[0.5]
 
-        values = np.asarray(self.data.values, dtype=np.float32).reshape(1, -1)
-        context = torch.tensor(values, dtype=torch.float32, device=self.device)
-
-        with torch.no_grad():
-            quantiles, mean = self.model.forecast(
-                context=context,
-                prediction_length=steps,
-            )
-
-        forecast = mean.reshape(-1).detach().cpu().numpy()
-        return pd.Series(
-            forecast,
-            index=pd.date_range(
-                self.data.index[-1] + pd.DateOffset(months=1), periods=steps, freq="M"
-            ),
-        )
-
-    def predict_quantiles(self, steps):
+    def predict_quantiles(
+        self, steps: int, quantile_levels: list[float]
+    ) -> dict[float, pd.Series]:
         if not self.is_fitted:
             raise RuntimeError("Modell muss erst mit fit() initialisiert werden")
 
@@ -837,19 +908,21 @@ class TiRexModel(BaseForecastModel):
         context = torch.tensor(values, dtype=torch.float32, device=self.device)
 
         with torch.no_grad():
-            quantiles, mean = self.model.forecast(
+            quantiles, _ = self.model.forecast(
                 context=context,
                 prediction_length=steps,
             )
 
-        forecast_index = pd.date_range(
-            self.data.index[-1] + pd.DateOffset(months=1), periods=steps, freq="M"
+        forecast_index = monthly_forecast_index(self.data, steps)
+        quantile_values = quantiles.detach().cpu().numpy()
+        interpolated = interpolate_quantile_levels(
+            quantile_values,
+            TIREX_FIXED_QUANTILE_LEVELS,
+            quantile_levels,
         )
         return {
-            "mean": pd.Series(
-                mean.reshape(-1).detach().cpu().numpy(), index=forecast_index
-            ),
-            "quantiles": quantiles.detach().cpu().numpy(),
+            level: pd.Series(values, index=forecast_index)
+            for level, values in interpolated.items()
         }
 
     @classmethod
@@ -861,6 +934,7 @@ class TiRexModel(BaseForecastModel):
             category=ModelCategory.DEEP_LEARNING,
             requires_stationarity=False,
             is_probabilistic=True,
+            supports_quantiles=True,
             supports_seasonality=True,
             min_data_points=12,
             default_params={"model_id": "NX-AI/TiRex", "backend": None},
@@ -879,13 +953,13 @@ class TransformerModel:
         self.data = None
 
     def build_model(self, input_shape):
-        from tensorflow.keras.layers import (
+        from keras.layers import (
             MultiHeadAttention,
             LayerNormalization,
             Dense,
             Input,
         )
-        from tensorflow.keras.models import Model
+        from keras.models import Model
         import tensorflow as tf
 
         inputs = Input(shape=input_shape)
