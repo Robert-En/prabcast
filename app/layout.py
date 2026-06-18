@@ -1,20 +1,8 @@
-import streamlit as st
 import os
 from pathlib import Path
+import streamlit as st
 
-# Get root directory
-ROOT_DIR = Path(__file__).parent.parent
-
-# Import Session State Management
 from setup_module.session_state_simple import init_state, ready_for_processing
-
-# Import UI Components
-from setup_module.design_system import UI
-
-# Initialize session state
-init_state()
-
-# Direct imports
 from tabs.upload import display_tab as upload_tab
 from tabs.aggregation import display_tab as aggregation_tab
 from tabs.produktverteilung import display_tab as produktverteilung_tab
@@ -22,12 +10,18 @@ from tabs.rohdaten import display_tab as rohdaten_tab
 from tabs.zerlegung import display_tab as zerlegung_tab
 from tabs.abcxyz import display_tab as abcxyz_tab
 from tabs.statistische_tests import display_tab as statistische_tests_tab
-from tabs.forecast import display_tab as forecast_tab
-from tabs.advanced_forecast import display_tab as advanced_forecast_tab
-from tabs.multivariate_forecast import display_tab as multivariate_forecast_tab
-from tabs.forecast_simple import display_tab as forecast_simple_tab
-from tabs.forecast_complex import display_tab as forecast_complex_tab
+from tabs.modellvergleich_univariate_modelle import display_tab as forecast_tab
+from tabs.modellvergleich_datenanreicherung import display_tab as advanced_forecast_tab
+from tabs.modellvergleich_multivariate_modelle import display_tab as multivariate_forecast_tab
+from tabs.prognose_univariate_prognose import display_tab as forecast_simple_tab
+from tabs.prognose_multivariate_prognose import display_tab as forecast_complex_tab
 from tabs.glossar import display_tab as glossar_tab
+
+# Get root directory
+ROOT_DIR = Path(__file__).parent.parent
+
+# Initialize session state
+init_state()
 
 # Page config
 st.set_page_config(layout="wide", page_title="PrABCast", page_icon=":bar_chart:", initial_sidebar_state="expanded")
@@ -35,7 +29,7 @@ st.set_page_config(layout="wide", page_title="PrABCast", page_icon=":bar_chart:"
 # Main content
 with st.container():
     st.image(os.path.join(ROOT_DIR, "media", "PrABCastLogo.png"), width=250)
-    
+
     # Create tabs
     tab0, tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "📖 Was ist PrABCast?",
@@ -49,7 +43,7 @@ with st.container():
 # Tab 0: Introduction
 with tab0:
     st.header("Was ist PrABCast?")
-    
+
     # Demonstrator notice
     st.warning("""
         **ℹ️ Hinweis zum Demonstrator**  
@@ -58,7 +52,7 @@ with tab0:
         Standardwerte**. Eine produktive Implementierung mit umfassender Hyperparameter-Optimierung 
         (Grid Search, Bayesian Optimization, erweiterte Kreuzvalidierung) ist auf Anfrage bei RIF verfügbar.
     """)
-    
+
     col1, col2 = st.columns([2, 1])
     with col1:
         st.write("""
@@ -115,10 +109,10 @@ if ready_for_processing():
     # Tab 2: Sales Analysis
     with tab2:
         subtab_selection = st.tabs([
-            "Rohdaten", 
-            "Aggregation", 
-            "Produktverteilung", 
-            "Zerlegung", 
+            "Rohdaten",
+            "Aggregation",
+            "Produktverteilung",
+            "Zerlegung",
             "ABC-XYZ",
             "Statistische Tests"
         ])
@@ -142,7 +136,7 @@ if ready_for_processing():
         with subtab_selection[4]:
             st.caption("📍 Analyse > Klassifikation nach Wert und Variabilität")
             abcxyz_tab()
-            
+
         with subtab_selection[5]:
             st.caption("📍 Analyse > Stationarität und Trends")
             statistische_tests_tab()
@@ -160,7 +154,7 @@ if ready_for_processing():
             
             RIF unterstützt Sie gerne bei der Implementierung produktionsreifer Prognoselösungen.
         """)
-        
+
         forecast_subtabs = st.tabs(["Univariate Modelle", "Datenanreicherung", "Multivariate Modelle"])
 
         with forecast_subtabs[0]:
@@ -181,7 +175,7 @@ if ready_for_processing():
     # Tab 4: Absatzprognose (Echte Prognose in die Zukunft)
     with tab4:
         st.info("⚠️ **Wichtig:** Führen Sie zuerst den **Modellvergleich (Tab 3)** durch, um das beste Modell zu identifizieren. Hier erstellen Sie dann die **echte Prognose für zukünftige Monate**.")
-        
+
         # Demonstrator notice for forecasting
         st.warning("""
             **🎯 Demonstrator-Hinweis: Vereinfachte Prognoseparametrisierung**  
@@ -194,7 +188,7 @@ if ready_for_processing():
             
             Für unternehmenskritische Prognosen unterstützt RIF bei der Entwicklung maßgeschneiderter Lösungen.
         """)
-        
+
         forecast_subtabs = st.tabs(["Univariate Prognose", "Multivariate Prognose"])
 
         with forecast_subtabs[0]:
@@ -207,7 +201,7 @@ if ready_for_processing():
             st.success("**Wann verwenden?** Nach Datenanreicherung (Tab 3 > Datenanreicherung) und Modellvergleich (Tab 3 > Multivariate Modelle), um mit externen Faktoren **in die Zukunft** zu prognostizieren.")
             forecast_complex_tab()
 
-    
+
 else:
     st.write("Bitte zuerst Dateiansicht ausfüllen.")
 

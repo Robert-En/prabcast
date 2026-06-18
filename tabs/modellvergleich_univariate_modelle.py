@@ -1,17 +1,13 @@
-# tabs/forecast.py
-import streamlit as st
-import pandas as pd
-import plotly.graph_objects as go
-import plotly.express as px
-import numpy as np
+# tabs/modellvergleich_univariate_modelle.py
 import sys
 from pathlib import Path
 from datetime import datetime
 
-# Add project root to Python path
-root_dir = str(Path(__file__).parent.parent)
-if root_dir not in sys.path:
-    sys.path.insert(0, root_dir)
+import numpy as np
+import streamlit as st
+import pandas as pd
+import plotly.graph_objects as go
+import plotly.express as px
 
 from setup_module.helpers import *
 from setup_module.session_state import get_app_state
@@ -20,11 +16,8 @@ from setup_module.forecast_helpers import (
     train_forecast_model,
     get_model_params_ui,
 )
-# ✨ NEU: Model Registry statt direkter Imports
 from setup_module.model_registry import get_model_registry
-from app.models import EnsembleModel  # Nur Ensemble noch direkt
-
-# ✨ NEUE UX: UI Components
+from models.univariate.ensemble import EnsembleModel
 from setup_module.design_system import UIComponents, CHART_COLORS, METRICS_EXPLANATION, highlight_best_metrics, get_chart_colors
 from setup_module.ui_helpers import (
     display_model_selector_with_info,
@@ -32,10 +25,14 @@ from setup_module.ui_helpers import (
     run_with_progress,
     export_dialog
 )
-# ✨ SMART DEFAULTS: Intelligente Empfehlungen
 from setup_module.smart_defaults import SmartDefaults
-# ✨ CONTEXTUAL HELP: Hilfe-System für Produktionsplaner
 from setup_module.help_system import HelpSystem, show_smart_warning, show_parameter_help
+
+
+# Add project root to Python path
+root_dir = str(Path(__file__).parent.parent)
+if root_dir not in sys.path:
+    sys.path.insert(0, root_dir)
 
 UI = UIComponents()
 

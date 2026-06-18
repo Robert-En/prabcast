@@ -522,7 +522,7 @@ def get_color(key: str) -> str:
 
 
 # ============================================================================
-# SHARED METRICS EXPLAINER (used by forecast.py & multivariate_forecast.py)
+# SHARED METRICS EXPLAINER (used by modellvergleich_univariate_modelle.py & modellvergleich_multivariate_modelle.py)
 # ============================================================================
 
 METRICS_EXPLANATION = """

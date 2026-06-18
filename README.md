@@ -106,20 +106,25 @@ Siehe [SETUP.md](SETUP.md) für detaillierte Installationsanweisungen.
 ```
 prabcast/
 ├── app/
-│   ├── layout.py          # Haupt-UI und Tab-Struktur
-│   ├── run.py             # Einstiegspunkt
-│   ├── models.py          # Univariate Modelle
-│   └── models_multi.py    # Multivariate Modelle
+│   ├── layout.py                                  # Haupt-UI und Tab-Struktur
+│   ├── run.py                                     # Einstiegspunkt
+├── sample_data/
+│   ├── demo_data_techparts.csv                    # Beispieldatensatz
 ├── tabs/
-│   ├── upload.py          # Datenimport
-│   ├── forecast.py        # Modellvergleich
-│   ├── advanced_forecast.py  # Datenanreicherung
-│   ├── multivariate_forecast.py  # Multivariate Prognosen
-│   └── glossar.py         # Fachbegriffe-Glossar
+│   ├── abcxyz.py                                  # ABC/XYZ-Analyse
+│   ├── upload.py                                  # Datenimport
+│   ├── modellvergleich_univariate_modelle.py      # Modellvergleich
+│   ├── modellvergleich_datenanreicherung.py       # Datenanreicherung
+│   ├── prognose_multivariate_prognose.py          # Multivariate Prognosen
+│   ├── statistische_tests.py                      # Statistische Tests
+│   └── glossar.py                                 # Fachbegriffe-Glossar
 ├── setup_module/
-│   ├── helpers.py         # Zentrale Hilfsfunktionen
-│   ├── evaluation.py      # Metriken (sMAPE, MAE, RMSE)
-│   └── model_registry.py  # Modellverwaltung
+│   ├── helpers.py                                 # Zentrale Hilfsfunktionen
+│   ├── evaluation.py                              # Metriken (sMAPE, MAE, RMSE)
+│   └── model_registry.py                          # Modellverwaltung
+├── models/
+│   ├── univariate/                                # Univariate Modelle (ARIMA, LSTM, etc.)
+│   └── multivariate/                              # Multivariate Modelle (XGBoost, etc
 └── templates/
     └── custom_data_template.csv  # CSV-Vorlage
 ```

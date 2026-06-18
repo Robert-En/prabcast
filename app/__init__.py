@@ -1,7 +1,5 @@
 """
 Application package for PrABCast.
-Contains core functionality and models.
+Contains core functionality.
 """
 
-from .models import *
-from .models_multi import *

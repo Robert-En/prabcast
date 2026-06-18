@@ -256,11 +256,11 @@ def get_model_registry() -> ModelRegistry:
 def _register_all_models(registry: ModelRegistry) -> None:
     """
     Registriert automatisch alle Modelle, die von BaseForecastModel erben
-    und im Modul 'app.models' definiert sind.
+    und im Modul 'models' definiert sind.
     """
     try:
         # 1. Das Modul dynamisch laden
-        module = importlib.import_module("app.models")
+        module = importlib.import_module("models")
 
         # 2. Alle Klassen im Modul durchlaufen
         for name, obj in inspect.getmembers(module):

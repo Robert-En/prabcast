@@ -1,4 +1,4 @@
-# tabs/multivariate_forecast.py
+# tabs/modellvergleich_multivariate_modelle.py
 import streamlit as st
 from setup_module.helpers import *
 from setup_module.session_state import get_app_state
@@ -9,7 +9,8 @@ from setup_module.evaluation import calculate_metrics, measure_performance
 from setup_module.error_handler import ErrorHandler, UserFeedback
 from setup_module.exceptions import DataValidationError, ModelTrainingError
 from setup_module.logging_config import log_data_operation, log_model_training
-from app.models_multi import build_lstm_model, build_xgboost_model
+from models.multivariate.xgb_multi import build_xgboost_model
+from models.multivariate.lstm_multi import build_lstm_model
 import pandas as pd
 import time
 import tracemalloc

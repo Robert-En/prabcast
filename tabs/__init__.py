@@ -10,9 +10,9 @@ from .rohdaten import display_tab as rohdaten
 from .zerlegung import display_tab as zerlegung
 from .abcxyz import display_tab as abcxyz
 from .statistische_tests import display_tab as statistische_tests
-from .forecast import display_tab as forecast
-from .advanced_forecast import display_tab as advanced_forecast
-from .multivariate_forecast import display_tab as multivariate_forecast
-from .forecast_simple import display_tab as forecast_simple
-from .forecast_complex import display_tab as forecast_complex
+from .modellvergleich_univariate_modelle import display_tab as forecast
+from .modellvergleich_datenanreicherung import display_tab as advanced_forecast
+from .modellvergleich_multivariate_modelle import display_tab as multivariate_forecast
+from .prognose_univariate_prognose import display_tab as forecast_simple
+from .prognose_multivariate_prognose import display_tab as forecast_complex
 from .glossar import display_tab as glossar

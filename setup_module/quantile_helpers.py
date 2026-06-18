@@ -7,7 +7,7 @@ import pandas as pd
 import torch
 from scipy.stats import norm
 
-TIREX_FIXED_QUANTILE_LEVELS = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+TIREX_QUANTILE_LEVELS = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 
 
 def monthly_forecast_index(data: pd.Series, steps: int) -> pd.DatetimeIndex:

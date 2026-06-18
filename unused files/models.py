@@ -20,7 +20,7 @@ from importlib.metadata import PackageNotFoundError, version
 # Model Management
 from setup_module.model_base import BaseForecastModel, ModelMetadata, ModelCategory
 from setup_module.quantile_helpers import (
-    TIREX_FIXED_QUANTILE_LEVELS,
+    TIREX_QUANTILE_LEVELS,
     monthly_forecast_index,
     normal_quantiles_from_forecast,
     sample_quantiles_from_tensor,
@@ -917,7 +917,7 @@ class TiRexModel(BaseForecastModel):
         quantile_values = quantiles.detach().cpu().numpy()
         interpolated = interpolate_quantile_levels(
             quantile_values,
-            TIREX_FIXED_QUANTILE_LEVELS,
+            TIREX_QUANTILE_LEVELS,
             quantile_levels,
         )
         return {

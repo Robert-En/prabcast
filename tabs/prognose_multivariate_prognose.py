@@ -8,7 +8,8 @@ from setup_module.error_handler import ErrorHandler, UserFeedback
 from setup_module.exceptions import DataValidationError, ModelTrainingError
 from setup_module.logging_config import log_data_operation, log_model_training
 from sklearn.preprocessing import MinMaxScaler
-from app.models_multi import *  # Use absolute imports
+from models.multivariate.xgb_multi import build_xgboost_model
+from models.multivariate.lstm_multi import build_lstm_model
 # ✨ UX/UI Components
 from setup_module.design_system import UIComponents
 from setup_module.ui_helpers import (

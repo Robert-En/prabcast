@@ -15,7 +15,6 @@ from .advanced.api_fetch import fetch_indices_data
 from .advanced.analysis import perform_analysis
 from .advanced.visualization import display_results
 from setup_module.evaluation import calculate_metrics
-from app.models_multi import build_lstm_model, build_xgboost_model
 import pandas as pd
 from io import BytesIO
 import time  # Add missing import for time.sleep()

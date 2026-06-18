@@ -1,4 +1,4 @@
-# forecast_simple.py
+# prognose_univariate_prognose.py
 from datetime import datetime
 from typing import Dict, Any
 
